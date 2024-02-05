@@ -6,6 +6,8 @@ from customtkinter import *
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import numpy as np
+import pandas as pd
+
 
 window = CTk()
 window.title("Speed Alarm for Modems")
@@ -39,7 +41,53 @@ def choose_file():
     filename = filedialog.askopenfilename(
         initialdir="/", title="Select a File", filetypes=(("All files", "*.*"), ("Text files", "*.txt*")))
 
+def on_xlims_change(event_ax):
+    xlims = event_ax.get_xlim()
+    start, end = mdates.num2date(xlims[0]), mdates.num2date(xlims[1])
+    visible_data = data[(data.index >= start) & (data.index <= end)]
+    
+    # Assuming you have a function to calculate downtime for visible data
+    # You might need to adjust this to calculate separately for each modem if needed
+    threshold_value = int(threshold.get())
+    downtime = calculate_downtime_for_visible_data(visible_data, threshold_value)
+    ax.title.set_text(
+                titles[temp1]+"     "+"Total time under "+threshold.get()+" Mb/s: "+str(downtime)+" seconds")
+def calculate_downtime_for_visible_data(visible_data, threshold):
+    below_threshold = visible_data < threshold
+    all_below_threshold = below_threshold.all(axis=1)
+    
+    down_time = 0
+    in_downtime = False
+    last_time = None
+    
+    for time, is_below in all_below_threshold.iteritems():
+        if is_below:
+            if not in_downtime:
+                # Downtime starts
+                in_downtime = True
+                last_time = time
+            # If already in downtime, continue without doing anything
+        else:
+            if in_downtime:
+                # Downtime ends, calculate duration
+                down_time += (time - last_time).total_seconds()
+                in_downtime = False
+                # No need to update last_time here since we're out of downtime
+
+    # If ended while still in downtime, add the duration till the last data point
+    if in_downtime:
+        down_time += (visible_data.index[-1] - last_time).total_seconds()
+    
+    return down_time
+
 def plot_graph(ax, y_data, total_data, modem_data):
+    timestamps = pd.to_datetime(total_data[0])  # Convert your time data to DateTime
+    global data
+    data = pd.DataFrame({
+        'Modem1_Speed': y_data[0],
+        'Modem2_Speed': y_data[1],
+        'Modem3_Speed': y_data[2] if len(y_data) > 2 else np.nan,  # Example for 3 modems
+    }, index=timestamps)
     temp1, temp2, temp3 = '', '', ''
     temp1 = modem_data[0]
     temp2 = modem_data[1]
@@ -65,6 +113,7 @@ def plot_graph(ax, y_data, total_data, modem_data):
         ax.grid(True)
         ax.set_xlabel('Time')
         ax.set_ylabel('Mb/s')
+        ax.callbacks.connect('xlim_changed', on_xlims_change)
 
 def create_graph(m):
     print(times)
