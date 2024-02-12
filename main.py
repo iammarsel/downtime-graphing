@@ -44,14 +44,13 @@ def choose_file():
 def on_xlims_change(event_ax):
     xlims = event_ax.get_xlim()
     start, end = mdates.num2date(xlims[0]), mdates.num2date(xlims[1])
-    visible_data = data[(data.index >= start) & (data.index <= end)]
+    visible_data = [y for line in event_ax.get_lines() for x, y in zip(line.get_xdata(), line.get_ydata()) if xlims[0] <= x <= xlims[1]]
     
     # Assuming you have a function to calculate downtime for visible data
     # You might need to adjust this to calculate separately for each modem if needed
     threshold_value = int(threshold.get())
     downtime = calculate_downtime_for_visible_data(visible_data, threshold_value)
-    ax.title.set_text(
-                titles[temp1]+"     "+"Total time under "+threshold.get()+" Mb/s: "+str(downtime)+" seconds")
+    event_ax.title.set_text("Total time under "+threshold.get()+" Mb/s: "+str(downtime)+" seconds")
 def calculate_downtime_for_visible_data(visible_data, threshold):
     below_threshold = visible_data < threshold
     all_below_threshold = below_threshold.all(axis=1)
@@ -83,6 +82,9 @@ def calculate_downtime_for_visible_data(visible_data, threshold):
 def plot_graph(ax, y_data, total_data, modem_data):
     timestamps = pd.to_datetime(total_data[0])  # Convert your time data to DateTime
     global data
+    print(len(timestamps), len(y_data[0]), len(y_data[1]), len(y_data[2] if len(y_data) > 2 else []))
+    max_length = len(timestamps)  # Assuming timestamps is the correct length
+    y_data = [np.pad(array, (0, max_length - len(array)), 'constant', constant_values=np.nan) if len(array) < max_length else array for array in y_data]
     data = pd.DataFrame({
         'Modem1_Speed': y_data[0],
         'Modem2_Speed': y_data[1],
@@ -228,7 +230,7 @@ def start_analysis():
     fig, axs = plt.subplots(3, figsize=(12, 12))
     for i,m in enumerate(modems):
         modem_data = m.get().split(",")
-        if len(m) > 0:
+        if len(modem_data) > 0:
             y_data,total_data = create_graph(modem_data)
             plot_graph(axs[i], y_data, total_data, modem_data)
             
